@@ -1,0 +1,278 @@
+# Environment: Ceph
+
+Base directory: **environments/ceph**
+
+:::note
+
+>**note:** The documentation for **ceph-ansible** can be found at:
+>
+><http://docs.ceph.com/ceph-ansible/master/>
+
+:::
+
+## Generic Ceph Configuration
+
+* **environments/ceph/configuration.yml**
+
+```yaml
+##########################
+# generic
+
+containerized_deployment: true
+
+osd_objectstore: bluestore
+osd_scenario: lvm
+
+generate_fsid: false
+fsid: 1a6b162c-cc15-4569-aa09-db536c93569f
+```
+
+* **environments/configuration.yml**
+
+```yaml
+##########################
+# ceph
+
+ceph_share_directory: /share
+ceph_cluster_fsid: 1a6b162c-cc15-4569-aa09-db536c93569f
+```
+
+## Devices for Ceph OSDs
+
+:::note
+
+>**note:** It is recommended to place the configuration of the devices in the inventory.
+
+:::
+
+Unlike other **by-id** links, WWNs ([World Wide Name](https://en.wikipedia.org/wiki/World_Wide_Name)) are fully persistent and
+will not change depending on the used subsystem. For more details see
+
+<https://wiki.archlinux.org/index.php/Persistent_block_device_naming>.
+
+* Configuration in **inventory/host_vars/{{STORAGENODES}}.yml**
+
+```yaml
+##########################################################
+# ceph
+
+devices:
+  - /dev/disk/by-id/wwn-0x50014ee206985361
+  - /dev/disk/by-id/wwn-0x50014ee2b1576368
+```
+
+When using NVMe devices, the EUI-64 ([64-Bit Extended Unique Identifier](https://tools.ietf.org/html/rfc4291#section-2.5.1))
+is used.
+
+```yaml
+##########################################################
+# ceph
+
+devices:
+  - /dev/disk/by-id/nvme-eui.343338304d1002630025384600000001
+  - /dev/disk/by-id/nvme-eui.343338304d1002450025384600000001
+```
+
+## Ceph Network
+
+Ceph uses a **public_network** which needs to be reachable by Ceph clients and a separate network, which is used by OSDs.
+The network used by OSDs is called **cluster_network**. When omitting the **cluster_network** variable, the **public_network** is
+used by OSDs as well.
+
+* **environments/ceph/configuration.yml**
+
+```yaml
+##########################
+# network
+
+public_network: 10.0.5.0/24
+cluster_network: 10.0.6.0/24
+```
+
+* **environments/kolla/configuration.yml**
+
+```yaml
+##########################################################
+# external ceph
+
+ceph_public_network: 10.0.5.0/24
+```
+
+:::note
+
+>**note:** It is recommended to place the configuration of the network interfaces in the inventory.
+
+:::
+
+* **inventory/host_vars/{{STORAGENODES}}.yml**
+
+```yaml
+##########################################################
+# ceph
+
+monitor_interface: eth0
+# monitor_address:
+```
+
+## Pools & Keys
+
+* **environments/ceph/configuration.yml**
+
+:::notes
+
+>**note:** Add or remove unneeded pools & keys accordingly.
+
+:::
+
+:::note
+
+>**note:** It is mandatory to choose the value of **pg_num** because it cannot be calculated automatically. More details in
+>
+><http://docs.ceph.com/docs/mimic/rados/operations/placement-groups/#a-preselection-of-pg-num>.
+>
+><http://ceph.com/pgcalc> can be used to calculate the number of PGs.
+
+:::
+
+```yaml
+##########################
+# pools & keys
+
+# NOTE: After the initial deployment of the Ceph Clusters, the following parameter can be
+#       set to false. It must only be set to true again when new pools or keys are added.
+openstack_config: true
+
+# Define pools for Openstack services
+openstack_cinder_backup_pool:
+  name: backups
+  pg_num: 32
+  rule_name: ""
+  application: "rbd"
+openstack_cinder_pool:
+  name: volumes
+  pg_num: 32
+  rule_name: ""
+  application: "rbd"
+openstack_glance_pool:
+  name: images
+  pg_num: 32
+  rule_name: ""
+  application: "rbd"
+openstack_gnocchi_pool:
+  name: metrics
+  pg_num: 32
+  rule_name: ""
+  application: "rbd"
+openstack_nova_pool:
+  name: vms
+  pg_num: 32
+  rule_name: ""
+  application: "rbd"
+
+openstack_pools:
+  - "{{ openstack_cinder_backup_pool }}"
+  - "{{ openstack_cinder_pool }}"
+  - "{{ openstack_glance_pool }}"
+  - "{{ openstack_gnocchi_pool }}"
+  - "{{ openstack_nova_pool }}"
+
+# Define keys for Ceph clients
+openstack_keys:
+  - name: client.glance
+    caps:
+      mon: "allow r"
+      osd: "allow class-read object_prefix rbd_children, allow rwx pool={{ openstack_glance_pool.name }}"
+    mode: "0600"
+  - name: client.cinder
+    caps:
+      mon: "allow r"
+      osd: "allow class-read object_prefix rbd_children, allow rwx pool={{ openstack_cinder_pool.name }}, allow rwx pool={{ openstack_nova_pool.name }}, allow rx pool={{ openstack_glance_pool.name }}"
+    mode: "0600"
+  - name: client.cinder-backup
+    caps:
+      mon: "allow r"
+      osd: "allow class-read object_prefix rbd_children, allow rwx pool={{ openstack_cinder_backup_pool.name }}"
+    mode: "0600"
+  - name: client.gnocchi
+    caps:
+      mon: "allow r"
+      osd: "allow class-read object_prefix rbd_children, allow rwx pool={{ openstack_gnocchi_pool.name }}"
+    mode: "0600"
+  - name: client.nova
+    caps:
+      mon: "allow r"
+      osd: "allow class-read object_prefix rbd_children, allow rwx pool={{ openstack_glance_pool.name }}, allow rwx pool={{ openstack_nova_pool.name }}, allow rwx pool={{ openstack_cinder_pool.name }}, allow rwx pool={{ openstack_cinder_backup_pool.name }}"
+    mode: "0600"
+```
+
+To define a new pool, add a new dictionary like following:
+
+```yaml
+openstack_SERVICE_pool:
+  name: SERVICE
+  pg_num: 32
+  rule_name: ""
+  application: "rbd"
+```
+
+Add the new pool to **openstack_pools** list and define a new key at **openstack_keys**. Keys are used by Ceph clients to access
+the pool.
+
+## Custom Ceph Configuration
+
+* <https://github.com/ceph/ceph-ansible#configuring-ceph>
+
+* **environments/ceph/configuration.yml**
+
+  ```yaml
+  ##########################
+  # custom
+
+  ceph_conf_overrides:
+    mon:
+      mon allow pool delete: true
+  ```
+
+## Dashboard
+
+* <https://docs.ceph.com/docs/master/mgr/dashboard/>
+
+* manual activation
+
+```sh
+ceph mgr module enable dashboard
+```
+
+* **environments/ceph/configuration.yml**
+
+```yaml
+##########################
+# custom
+
+ceph_mgr_modules:
+  - dashboard
+  [...]
+```
+
+## NUMA
+
+```sh
+$ lscpu | grep NUMA
+NUMA nodes(s):          2
+NUMA node0 CPU(s)   :   0-13,28-41
+NUMA node1 CPU(s)   :   14-27,42-55
+```
+
+```sh
+$ cat /sys/class/net/ens1f0/device/numa_node
+0
+$ cat /sys/class/net/ens2f0/device/numa_node
+0
+```
+
+* **inventory/host_vars/{{STORAGENODES}}.yml**
+
+```yaml
+ceph_osd_docker_cpuset_cpus: "0-13"
+ceph_osd_docker_cpuset_mems: "0"
+```

@@ -1,0 +1,39 @@
+# Hardening
+
+Base directory: **environments/generic**
+
+**Name**    |**Repository**                                     |**Documentation**
+------------|---------------------------------------------------|-----------------
+hardening   |<https://github.com/openstack/ansible-hardening>   |
+
+## Use of local NTP server
+
+* Remove **security_ntp_servers** and **security_allowed_ntp_subnets** from **environments/configuration.yml**
+* host_vars file of a system providing a local NTP server
+
+```yaml
+##########################################################
+# hardening
+
+security_ntp_servers:
+    - 1.de.pool.ntp.org
+    - 2.de.pool.ntp.org
+    - 3.de.pool.ntp.org
+    - 4.de.pool.ntp.org
+security_allowed_ntp_subnets:
+    - 127.0.0.1/32
+    - 192.168.102.0/24
+security_ntp_bind_local_interfaces_only: no
+```
+
+* host_vars file of a system using a local NTP server
+
+```yaml
+##########################################################
+# hardening
+
+security_ntp_servers:
+    - 192.168.102.19
+security_allowed_ntp_subnets:
+    - 127.0.0.1/32
+```
