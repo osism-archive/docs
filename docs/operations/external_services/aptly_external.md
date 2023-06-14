@@ -64,13 +64,13 @@ gpg1 --export --armor --output /opt/aptly/public/gpgkey OSISM
 
 During the first command, you'll be prompted for some input. Use these steps to answer them:
 
-- \<RETURN>
-- \<RETURN>
-- \<RETURN>
+- `<RETURN>`
+- `<RETURN>`
+- `<RETURN>`
 - y
 - OSISM
-- \<RETURN>
-- \<RETURN>
+- `<RETURN>`
+- `<RETURN>`
 - O
 - Super_s3cret
 - Super_s3cret
